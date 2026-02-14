@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Audiobook Studio Pro+</title>
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI;
+  background:linear-gradient(-45deg,#0f2027,#203a43,#2c5364,#1c1c1c);
+  background-size:400% 400%;
+  animation:gradientBG 15s ease infinite;
+  color:white;
+}
+
+@keyframes gradientBG{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+
+.container{
+  max-width:900px;
+  margin:30px auto;
+  padding:20px;
+  background:rgba(255,255,255,0.05);
+  border-radius:20px;
+  backdrop-filter:blur(15px);
+  box-shadow:0 0 40px rgba(0,0,0,0.4);
+}
+
+textarea{
+  width:100%;
+  height:150px;
+  border-radius:12px;
+  padding:12px;
+  resize:none;
+  border:none;
+  font-size:15px;
+}
+
+.controls{
+  margin-top:10px;
+}
+
+button{
+  padding:8px 16px;
+  margin:6px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:bold;
+  transition:0.3s;
+}
+
+button:hover{
+  transform:scale(1.05);
+  box-shadow:0 0 15px #00c6ff;
+}
+
+.primary{ background:#00c6ff; color:black; }
+.secondary{ background:#444; color:white; }
+
+select,input{
+  margin:5px;
+}
+
+.stats{
+  font-size:14px;
+  margin-top:8px;
+}
+
+canvas{
+  margin-top:20px;
+  width:100%;
+  height:120px;
+  background:rgba(0,0,0,0.4);
+  border-radius:12px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h2>AI Audiobook Studio Pro+</h2>
+
+<textarea id="textInput" placeholder="Type or paste text here..."></textarea>
+
+<div class="stats">
+Words: <span id="wordCount">0</span> |
+Characters: <span id="charCount">0</span> |
+Est. Time: <span id="readTime">0</span> min
+</div>
+
+<div class="controls">
+
+<select id="voiceSelect"></select>
+
+<label>Speed</label>
+<input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
+
+<button class="primary" onclick="startSpeech()">Speak</button>
+<button class="secondary" onclick="pauseSpeech()">Pause</button>
+<button class="secondary" onclick="resumeSpeech()">Resume</button>
+<button class="secondary" onclick="stopSpeech()">Stop</button>
+<button class="secondary" onclick="clearText()">Clear</button>
+<button class="secondary" onclick="copyText()">Copy</button>
+
+</div>
+
+<canvas id="visualizer"></canvas>
+
+</div>
+
+<script>
+let voices=[];
+let utter;
+let animationId;
+let audioContext;
+let analyser;
+let dataArray;
+
+const textInput=document.getElementById("textInput");
+const canvas=document.getElementById("visualizer");
+const ctx=canvas.getContext("2d");
+
+canvas.width=canvas.offsetWidth;
+canvas.height=120;
+
+textInput.addEventListener("input",updateStats);
+
+function updateStats(){
+  const text=textInput.value.trim();
+  const words=text.split(/\s+/).filter(Boolean).length;
+  document.getElementById("wordCount").innerText=words;
+  document.getElementById("charCount").innerText=text.length;
+  document.getElementById("readTime").innerText=Math.ceil(words/180);
+}
+
+function loadVoices(){
+  voices=speechSynthesis.getVoices();
+  const select=document.getElementById("voiceSelect");
+  select.innerHTML="";
+  voices.forEach((v,i)=>{
+    let option=document.createElement("option");
+    option.value=i;
+    option.text=v.name;
+    select.appendChild(option);
+  });
+}
+speechSynthesis.onvoiceschanged=loadVoices;
+
+function startSpeech(){
+  speechSynthesis.cancel();
+
+  utter=new SpeechSynthesisUtterance(textInput.value);
+  utter.voice=voices[voiceSelect.value];
+  utter.rate=speed.value;
+
+  utter.onstart=()=>{
+    startVisualizer();
+  };
+
+  utter.onend=()=>{
+    cancelAnimationFrame(animationId);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  };
+
+  speechSynthesis.speak(utter);
+}
+
+function pauseSpeech(){ speechSynthesis.pause(); }
+function resumeSpeech(){ speechSynthesis.resume(); }
+function stopSpeech(){ speechSynthesis.cancel(); }
+
+function clearText(){
+  textInput.value="";
+  updateStats();
+}
+
+function copyText(){
+  navigator.clipboard.writeText(textInput.value);
+  alert("Copied!");
+}
+
+function startVisualizer(){
+  audioContext=new (window.AudioContext||window.webkitAudioContext)();
+  analyser=audioContext.createAnalyser();
+  analyser.fftSize=256;
+  const bufferLength=analyser.frequencyBinCount;
+  dataArray=new Uint8Array(bufferLength);
+
+  function draw(){
+    animationId=requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+
+    ctx.fillStyle="rgba(0,0,0,0.3)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    const barWidth=(canvas.width/bufferLength)*2;
+    let x=0;
+
+    for(let i=0;i<bufferLength;i++){
+      const barHeight=dataArray[i];
+      ctx.fillStyle="rgb("+(barHeight+100)+",50,255)";
+      ctx.fillRect(x,canvas.height-barHeight/2,barWidth,barHeight/2);
+      x+=barWidth+1;
+    }
+  }
+  draw();
+}
+</script>
+
+</body>
+</html>
